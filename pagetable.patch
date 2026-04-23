@@ -1,0 +1,73 @@
+diff --git a/kernel/defs.h b/kernel/defs.h
+index d1b6bb9..1e7e054 100644
+--- a/kernel/defs.h
++++ b/kernel/defs.h
+@@ -173,6 +173,7 @@ uint64          walkaddr(pagetable_t, uint64);
+ int             copyout(pagetable_t, uint64, char *, uint64);
+ int             copyin(pagetable_t, char *, uint64, uint64);
+ int             copyinstr(pagetable_t, char *, uint64, uint64);
++void            vmprint(pagetable_t);
+ 
+ // plic.c
+ void            plicinit(void);
+diff --git a/kernel/exec.c b/kernel/exec.c
+index 6d7c452..1ff2c96 100644
+--- a/kernel/exec.c
++++ b/kernel/exec.c
+@@ -127,7 +127,9 @@ exec(char *path, char **argv)
+   p->trapframe->epc = elf.entry;  // initial program counter = main
+   p->trapframe->sp = sp; // initial stack pointer
+   proc_freepagetable(oldpagetable, oldsz);
+-
++  if (p->pid == 1) {
++    vmprint(p->pagetable);
++  }
+   return argc; // this ends up in a0, the first argument to main(argc, argv)
+ 
+  bad:
+diff --git a/kernel/vm.c b/kernel/vm.c
+index 62421a2..1c4cf46 100644
+--- a/kernel/vm.c
++++ b/kernel/vm.c
+@@ -293,6 +293,36 @@ freewalk(pagetable_t pagetable)
+   kfree((void*)pagetable);
+ }
+ 
++void 
++vmprint_recursive(pagetable_t pagetable, int level) {
++  for (int i = 0; i < 512; i++) {
++    pte_t pte = pagetable[i];
++    
++    if (pte & PTE_V) {
++      uint64 pa = PTE2PA(pte);
++
++      if (level == 0) {
++        printf(" ..");
++      } else if (level == 1) {
++        printf(" .. ..");
++      } else {
++        printf(" .. .. ..");
++      }
++      printf("%d pte %p pa %p\n", i, (void*)pte, (void*)pa);
++      
++      if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
++        vmprint_recursive((pagetable_t)pa, level + 1);
++      }
++    }
++  }
++}
++
++void 
++vmprint(pagetable_t pagetable) {
++  printf("page table %p\n", pagetable);
++  vmprint_recursive(pagetable, 0);
++}
++
+ // Free user memory pages,
+ // then free page-table pages.
+ void
+@@ -449,3 +479,4 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
+     return -1;
+   }
+ }
++
